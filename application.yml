@@ -1,8 +1,4 @@
-management:
-  security:
-    enabled: false
-
-stringProperty: testValue
-listProperty:
-  - item1
-  - item2
+#stringProperty: value1
+#listProperty:
+#  - item1
+#  - item2

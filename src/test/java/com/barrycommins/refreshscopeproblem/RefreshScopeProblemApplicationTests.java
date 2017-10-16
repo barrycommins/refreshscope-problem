@@ -4,67 +4,66 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.boot.test.util.EnvironmentTestUtils;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.junit4.SpringRunner;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(SpringRunner.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(properties = {"stringProperty=testValue", "listProperty=item1,item2"})
 public class RefreshScopeProblemApplicationTests {
+
     @Autowired
-    private TestRestTemplate restTemplate;
+    private RefreshScopeConfigurationProperties properties;
+
+    @SuppressWarnings("SpringJavaAutowiringInspection")
+    @Autowired
+    private org.springframework.cloud.context.scope.refresh.RefreshScope scope;
+
+    @Autowired
+    private ConfigurableEnvironment environment;
 
     @Test
-    public void testStringProperty() {
-        //check initial value
-        String stringValue = restTemplate.getForObject("/string", String.class);
-        assertThat(stringValue).isEqualTo("testValue");
-
-        //update and refresh value
-        System.setProperty("stringProperty", "testValue2");
-        final ResponseEntity<String> refreshEntity = restTemplate.postForEntity("/refresh", "", String.class);
-        assertThat(refreshEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
-
-        //test new value
-        stringValue = restTemplate.getForObject("/string", String.class);
-        assertThat(stringValue).isEqualTo("testValue2");
+    @DirtiesContext
+    public void testStringValue() {
+        assertThat(this.properties.getStringProperty()).isEqualTo("testValue");
+        EnvironmentTestUtils.addEnvironment(this.environment, "stringProperty:newValue");
+        this.scope.refreshAll();
+        assertThat(this.properties.getStringProperty()).isEqualTo("newValue");
     }
 
     @Test
-    public void testListPropertyAddItem() {
-        //check initial value
-        List list = restTemplate.getForObject("/list", List.class);
-        assertThat(list).hasSize(2);
-
-        //update and refresh value
-        System.setProperty("listProperty", "item1,item2,item3");
-        final ResponseEntity<String> refreshEntity = restTemplate.postForEntity("/refresh", "", String.class);
-        assertThat(refreshEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
-
-        //test new value
-        list = restTemplate.getForObject("/list", List.class);
-        assertThat(list).hasSize(3);
+    @DirtiesContext
+    public void testListValuesChanged() {
+        assertThat(this.properties.getListProperty()).hasSize(2);
+        assertThat(this.properties.getListProperty()).contains("item1", "item2");
+        EnvironmentTestUtils.addEnvironment(this.environment, "listProperty:itemA,itemB");
+        this.scope.refreshAll();
+        assertThat(this.properties.getListProperty()).hasSize(2);
+        assertThat(this.properties.getListProperty()).contains("itemA", "itemB");
     }
 
     @Test
-    public void testListPropertyRemoveItem() {
-        //check initial value
-        List list = restTemplate.getForObject("/list", List.class);
-        assertThat(list).hasSize(2);
-
-        //update and refresh value
-        System.setProperty("listProperty", "item1");
-        final ResponseEntity<String> refreshEntity = restTemplate.postForEntity("/refresh", "", String.class);
-        assertThat(refreshEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
-
-        //test new value
-        list = restTemplate.getForObject("/list", List.class);
-        assertThat(list).hasSize(1);
+    @DirtiesContext
+    public void testListValueAdded() {
+        assertThat(this.properties.getListProperty()).hasSize(2);
+        assertThat(this.properties.getListProperty()).contains("item1", "item2");
+        EnvironmentTestUtils.addEnvironment(this.environment, "listProperty:item1,item2,item3");
+        this.scope.refreshAll();
+        assertThat(this.properties.getListProperty()).hasSize(3);
+        assertThat(this.properties.getListProperty()).contains("item1", "item2", "item3");
     }
 
+    @Test
+    @DirtiesContext
+    public void testListValueRemoved() {
+        assertThat(this.properties.getListProperty()).hasSize(2);
+        assertThat(this.properties.getListProperty()).contains("item1", "item2");
+        EnvironmentTestUtils.addEnvironment(this.environment, "listProperty:item1");
+        this.scope.refreshAll();
+        assertThat(this.properties.getListProperty()).hasSize(1);
+        assertThat(this.properties.getListProperty()).contains("item1");
+    }
 }
